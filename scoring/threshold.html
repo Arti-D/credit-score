@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Кредитный скоринг Home Credit</title>
+  <style>
+    :root { color-scheme: light; font: 16px/1.5 system-ui, sans-serif; color: #152845; background: #edf2f8; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    header { background: #142744; color: #f7faff; padding: 2.8rem max(1.25rem, calc((100% - 1080px) / 2)) 2.5rem; }
+    h1, h2, p { margin: 0; }
+    h1 { font-size: clamp(2rem, 5.5vw, 3.25rem); line-height: 1.06; letter-spacing: -.045em; }
+    header p { margin-top: .7rem; color: #c6d6ec; }
+    main { max-width: 1120px; margin: auto; padding: 1.5rem 1.25rem 3rem; display: grid; gap: 1rem; }
+    section { background: white; border: 1px solid #d9e2ee; border-radius: 16px; padding: 1.35rem; }
+    h2 { font-size: 1.35rem; letter-spacing: -.02em; }
+    .intro { color: #435571; margin-top: .25rem; max-width: 75ch; }
+    .control { margin: 1.2rem 0; padding: 1rem; background: #eef4fc; border-radius: 12px; }
+    label { display: flex; justify-content: space-between; gap: .5rem; font-weight: 700; }
+    output { color: #1d4ca5; font-variant-numeric: tabular-nums; }
+    input { display: block; width: 100%; margin: .7rem 0; accent-color: #2354ac; cursor: pointer; }
+    button { margin-top: .2rem; padding: .45rem .7rem; color: #1b4289; border: 1px solid #aabedb; border-radius: 7px; background: white; cursor: pointer; font: inherit; }
+    button:hover { background: #e1ebfc; }
+    .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .65rem; margin: .85rem 0; }
+    .metrics div { background: #f5f7fb; border-radius: 10px; padding: .85rem; }
+    dt { color: #435571; font-size: .85rem; }
+    dd { margin: 0; font-size: 1.5rem; font-weight: 720; font-variant-numeric: tabular-nums; }
+    #status { min-height: 1.5rem; color: #006359; font-weight: 600; }
+    #status[data-ok="false"] { color: #9c3c2b; }
+    img { display: block; width: 100%; height: auto; margin-top: .7rem; }
+    @media (max-width: 680px) { .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 350px) { .metrics { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Кредитный скоринг Home Credit</h1>
+    <p>Как порог риска влияет на долю одобрений и качество портфеля</p>
+  </header>
+  <main>
+    <section aria-labelledby="policy-heading">
+      <h2 id="policy-heading">Подбор порога на validation</h2>
+      <p class="intro">Модель <span id="model"></span> одобряет заявку, когда прогноз вероятности проблем с платежами не превышает порог.</p>
+      <div class="control">
+        <label for="threshold">Порог вероятности <output id="cutoff" for="threshold"></output></label>
+        <input id="threshold" type="range" min="0" max="1000" step="1">
+        <button id="reset" type="button">Вернуть выбранный порог</button>
+      </div>
+      <dl class="metrics">
+        <div><dt>Доля одобренных</dt><dd id="approval"></dd></div>
+        <div><dt>TARGET = 1 среди одобренных</dt><dd id="bad"></dd></div>
+        <div><dt>Верхняя граница 95% ДИ</dt><dd id="upper"></dd></div>
+        <div><dt>Отказы при TARGET = 0</dt><dd id="declined"></dd></div>
+      </dl>
+      <p id="status" aria-live="polite"></p>
+    </section>
+
+    <section aria-labelledby="test-heading">
+      <h2 id="test-heading">Итоговая проверка на test</h2>
+      <p class="intro">Фиксированный порог <strong id="test-cutoff"></strong>, выбранный на validation.</p>
+      <dl class="metrics">
+        <div><dt>Доля одобренных</dt><dd id="test-approval"></dd></div>
+        <div><dt>Ожидаемая доля TARGET = 1</dt><dd id="test-expected"></dd></div>
+        <div><dt>Наблюдаемая доля TARGET = 1</dt><dd id="test-bad"></dd></div>
+        <div><dt>Отказы при TARGET = 0</dt><dd id="test-declined"></dd></div>
+      </dl>
+    </section>
+
+    <section aria-labelledby="charts-heading">
+      <h2 id="charts-heading">Качество и стабильность</h2>
+      <img src="quality.png" width="1680" height="1232" alt="ROC двух моделей, калибровка, компромисс одобрений и риска, PSI между случайными выборками">
+    </section>
+
+    <section aria-labelledby="shap-heading">
+      <h2 id="shap-heading">Влияние признаков</h2>
+      <img src="shap.png" width="1680" height="630" alt="Общая важность признаков LightGBM и вклады признаков для одной заявки по TreeSHAP">
+    </section>
+  </main>
+  <script id="results" type="application/json">__RESULTS__</script>
+  <script>
+    const results = JSON.parse(document.getElementById('results').textContent);
+    const thresholds = results.policy_curve;
+    const slider = document.getElementById('threshold');
+    const status = document.getElementById('status');
+    const recommended = Math.round(results.validation_policy.threshold * (thresholds.length - 1));
+    const percent = new Intl.NumberFormat('ru-RU', { style: 'percent', maximumFractionDigits: 2 });
+    const integer = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 });
+
+    function show(id, value) {
+      document.getElementById(id).textContent = value;
+    }
+
+    function render() {
+      const index = Number(slider.value);
+      const [approval, bad, upper, declined] = thresholds[index];
+      const cutoff = percent.format(index / (thresholds.length - 1));
+      const withinLimit = upper !== null && upper <= results.risk_limit;
+      show('cutoff', cutoff);
+      slider.setAttribute('aria-valuetext', cutoff);
+      show('approval', percent.format(approval));
+      show('bad', bad === null ? '—' : percent.format(bad));
+      show('upper', upper === null ? '—' : percent.format(upper));
+      show('declined', integer.format(declined));
+      status.dataset.ok = String(withinLimit);
+      const limit = percent.format(results.risk_limit);
+      if (upper === null) {
+        status.textContent = 'При этом пороге одобренных заявок нет.';
+      } else if (withinLimit) {
+        status.textContent = `Верхняя граница интервала укладывается в лимит ${limit}.`;
+      } else {
+        status.textContent = `Верхняя граница интервала превышает лимит ${limit}.`;
+      }
+    }
+
+    const test = results.test_policy;
+    show('model', results.selected);
+    show('test-cutoff', percent.format(test.threshold));
+    show('test-approval', percent.format(test.approval_rate));
+    show('test-expected', percent.format(test.expected_default_rate));
+    show('test-bad', percent.format(test.default_rate));
+    show('test-declined', integer.format(test.good_rejected));
+    slider.max = String(thresholds.length - 1);
+    slider.value = String(recommended);
+    slider.addEventListener('input', render);
+    document.getElementById('reset').addEventListener('click', () => {
+      slider.value = String(recommended);
+      render();
+    });
+    render();
+  </script>
+</body>
+</html>
