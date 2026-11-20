@@ -1,5 +1,7 @@
 # credit-score
 
+**[Открыть интерактивный дашборд на GitHub Pages](https://arti-d.github.io/credit-score/)**
+
 ## Цель проекта
 Учебный проект по кредитному скорингу на данных
 [Home Credit Default Risk](https://www.kaggle.com/competitions/home-credit-default-risk).
